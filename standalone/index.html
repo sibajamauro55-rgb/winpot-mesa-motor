@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#120c08" />
+  <title>Mesa Motor</title>
+  <style>
+    :root{--bg:#120c08;--panel:#1c140e;--ink:#f4e6c8;--muted:#b9a27a;--line:#3a2b1c;--p:#2f6bff;--b:#c43333;--t:#c9a227;--gold:#e2b657}
+    *{box-sizing:border-box}body{margin:0;font-family:"Trebuchet MS","Segoe UI",sans-serif;background:radial-gradient(circle at top,#2a1c10,#120c08 55%);color:var(--ink)}
+    .shell{max-width:1080px;margin:0 auto;padding:20px 16px 48px}
+    .kicker{margin:0;color:var(--gold);letter-spacing:.12em;text-transform:uppercase;font-size:11px}
+    h1{margin:4px 0 0;font-size:30px}h2{margin:0 0 10px;font-size:14px;color:var(--gold)}
+    .warn{color:var(--muted);font-size:13px}
+    .bar{display:flex;border-radius:999px;overflow:hidden;min-height:36px;border:1px solid var(--line)}
+    .seg{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;min-width:42px}
+    .seg.p{background:var(--p)}.seg.b{background:var(--b)}.seg.t{background:var(--t);color:#1a1208}
+    .verdict{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:16px 18px;border-radius:16px;border:1px solid var(--line);background:var(--panel);margin:14px 0}
+    .verdict strong{font-size:34px}.verdict.banca{box-shadow:inset 0 0 0 1px #c4333388}.verdict.punto{box-shadow:inset 0 0 0 1px #2f6bff88}
+    .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+    button{border:0;border-radius:12px;padding:14px 10px;font-size:16px;font-weight:700;color:#fff;cursor:pointer}
+    .bp{background:var(--p)}.bb{background:var(--b)}.bt{background:var(--t);color:#1a1208}
+    .bg{background:transparent;color:var(--ink);border:1px solid var(--line)}
+    article{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px;margin-top:12px}
+    .road{display:grid;grid-auto-flow:column;grid-auto-columns:22px;gap:3px}
+    .cell{width:20px;height:20px;border-radius:50%;border:2px solid #2a2118}
+    .cell.P{border-color:var(--p);background:#17306e}.cell.B{border-color:var(--b);background:#5a1515}
+    .cell.R{background:var(--b);border-color:var(--b)}.cell.A{background:var(--p);border-color:var(--p)}
+    .cell.tiny{width:10px;height:10px;margin:5px auto}
+    .muted{color:var(--muted)}
+    textarea{width:100%;min-height:70px;border-radius:12px;border:1px solid var(--line);background:#160f0a;color:var(--ink);padding:10px}
+    footer{margin-top:22px;color:var(--muted);font-size:12px}
+    .derived{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+    @media(max-width:800px){.derived,.pad{grid-template-columns:1fr 1fr}.derived{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <p class="kicker">Winpot · mesas live · lectura de roads</p>
+  <h1>Mesa Motor</h1>
+  <p class="warn">No predice cartas. Banca ~1.06% house edge · Punto ~1.24% · Empate ~14.4%.</p>
+  <div class="bar" id="bar"></div>
+  <div class="verdict sit" id="verdict"></div>
+  <div class="pad">
+    <button class="bp" onclick="push('P')">Punto</button>
+    <button class="bb" onclick="push('B')">Banca</button>
+    <button class="bt" onclick="push('T')">Empate</button>
+    <button class="bg" onclick="undo()">Undo</button>
+    <button class="bg" onclick="reset()">Zapato nuevo</button>
+    <button class="bg" onclick="demo()">Demo</button>
+  </div>
+  <article><h2>Big Road</h2><div class="road" id="big"></div></article>
+  <div class="derived">
+    <article><h2>Ojo Gordo</h2><div class="road" id="beb"></div></article>
+    <article><h2>Small</h2><div class="road" id="small"></div></article>
+    <article><h2>Cucaracha</h2><div class="road" id="cock"></div></article>
+  </div>
+  <article><h2>Patrones y voto</h2><div id="info"></div></article>
+  <article>
+    <h2>Pegar zapato</h2>
+    <textarea id="paste" placeholder="B B P T B P P B"></textarea>
+    <p><button class="bg" onclick="loadPaste()">Cargar secuencia</button></p>
+  </article>
+  <footer>Motor local. Los circulos registran el pasado; no mueven las cartas.</footer>
+</div>
+<script>
+const KEY="mesa-motor-shoe-v1";
+const DEMO=["P","B","B","P","B","P","P","B","B","P","B","P","B","B","B","B","B","B","P","B","B","P","P","P","B","T","B","P","B","B","P","B"];
+let shoe=JSON.parse(localStorage.getItem(KEY)||"[]");
+function opp(s){return s==="P"?"B":s==="B"?"P":null}
+function occ(cols,c,r){return (c<0||c>=cols.length||r<0||r>=cols[c].length)?null:cols[c][r]}
+function derivedColor(cols,c,r,k){
+  if(r===0){const prev=c-1,ref=c-1-k; if(prev<0||ref<0)return null; return cols[prev].length===cols[ref].length?"R":"A"}
+  const rc=c-k; if(rc<0)return null;
+  const here=occ(cols,rc,r), above=occ(cols,rc,r-1);
+  if((here===null)===(above===null)) return (!here||here===above)?"R":"A";
+  return "A";
+}
+function build(results){
+  const columns=[], ties=[], beb=[], small=[], cock=[];
+  for(const res of results){
+    if(res==="T"){ if(columns.length){const c=columns.length-1,r=columns[c].length-1; ties[c][r]+=1} continue }
+    if(!columns.length||columns.at(-1).at(-1)!==res){columns.push([res]); ties.push([0])}
+    else {columns.at(-1).push(res); ties.at(-1).push(0)}
+    const c=columns.length-1,r=columns[c].length-1;
+    [[beb,1],[small,2],[cock,3]].forEach(([b,k])=>{const col=derivedColor(columns,c,r,k); if(col)b.push(col)});
+  }
+  const last=[...results].reverse().find(x=>x!=="T")||null;
+  return {columns,ties,beb,small,cock,last,streak:columns.length?columns.at(-1).length:0,heights:columns.map(c=>c.length)};
+}
+function redRatio(m,n=8){if(!m.length)return null; const w=m.slice(-n); return w.filter(x=>x==="R").length/w.length}
+function analyze(results){
+  const rd=build(results); const last=rd.last, streak=rd.streak, h=rd.heights;
+  const patterns=[];
+  const add=(name,tag,intention,suggests,strength,active)=>patterns.push({name,tag,intention,suggests,strength,active});
+  add("Dragon","DRAGON","Seguir la columna caliente.",streak>=6?last:null,streak>=8?4:3,streak>=6);
+  add("Racha 3-5","RACHA","Seguir mientras no corte.",streak>=3&&streak<=5?last:null,2,streak>=3&&streak<=5);
+  const last4=h.slice(-4); const chop=last4.length>=4&&last4.every(x=>x===1);
+  add("Ping-pong 1-1-1-1","CHOP","Apostar al contrario del ultimo.",chop?opp(last):null,3,chop);
+  const last3=h.slice(-3); const dob=last3.length===3&&last3.every(x=>x===2);
+  add("Dobles 2-2-2","DOBLES","Se espera que la columna se quede en 2.",dob&&last?(streak===2?opp(last):last):null,3,dob);
+  const ratios=[redRatio(rd.beb),redRatio(rd.small),redRatio(rd.cock)];
+  const regular=ratios.filter(x=>x!=null&&x>=.62).length;
+  const choppy=ratios.filter(x=>x!=null&&x<=.38).length;
+  add("Derivadas ROJAS","REGULAR","El Big Road se esta copiando. Seguir el gesto.",regular>=2?last:null,3,regular>=2);
+  add("Derivadas AZULES","CHOPPY","Zapato irregular. No perseguir.",choppy>=2&&streak>=3?opp(last):null,2,choppy>=2);
+  const votes=[{system:"Banca matematica",pick:"B",reason:"Menor house edge (~1.06%).",w:1}];
+  if(last) votes.push({system:"Seguir al ultimo",pick:last,reason:"Momentum de piso.",w:2});
+  patterns.filter(p=>p.active&&p.suggests).forEach(p=>votes.push({system:"Patron "+p.tag,pick:p.suggests,reason:p.intention,w:p.strength}));
+  if(rd.beb.length&&last){
+    const mark=rd.beb.at(-1);
+    votes.push({system:"Ojo Gordo",pick:mark==="R"?last:(streak>=3?opp(last):last),reason:mark==="R"?"Rojo: se copia.":"Azul: se rompe.",w:mark==="R"?3:2});
+  }
+  const score={P:0,B:0}; votes.forEach(v=>{if(v.pick)score[v.pick]+=v.w});
+  let label="SENTARSE", pick=null, conv="nula";
+  if(score.P!==score.B){pick=score.B>score.P?"B":"P"; label=pick==="B"?"BANCA":"PUNTO"; const g=Math.abs(score.B-score.P); conv=g<=2?"baja":g<=5?"media":"alta"}
+  const n=results.length, P=results.filter(x=>x==="P").length, B=results.filter(x=>x==="B").length, T=results.filter(x=>x==="T").length;
+  return {rd,patterns,votes,score,label,pick,conv,n,P,B,T};
+}
+function grid(el, cols, kind){
+  const rows=Math.min(6, Math.max(1,...cols.map(c=>c.length),1));
+  el.style.gridTemplateRows=`repeat(${rows},22px)`;
+  el.innerHTML=cols.map(col=>Array.from({length:rows},(_,r)=>{
+    const v=col[r]; if(!v) return `<span class="cell"></span>`;
+    return `<span class="cell ${v} ${kind==="d"?"tiny":""}"></span>`;
+  }).join("")).join("");
+}
+function pack(marks){const cols=[]; let cur=[], last=null; for(const m of marks){if(!last||m!==last||cur.length>=6){cur=[m];cols.push(cur)}else cur.push(m); last=m} return cols}
+function render(){
+  localStorage.setItem(KEY, JSON.stringify(shoe));
+  const s=analyze(shoe);
+  const p=s.n?s.P/s.n*100:33, t=s.n?s.T/s.n*100:16, b=s.n?s.B/s.n*100:51;
+  document.getElementById("bar").innerHTML=`<span class="seg p" style="width:${p}%">${s.n?p.toFixed(0)+"% P":"P"}</span><span class="seg t" style="width:${t}%">${s.n?t.toFixed(0)+"% T":"T"}</span><span class="seg b" style="width:${b}%">${s.n?b.toFixed(0)+"% B":"B"}</span>`;
+  const v=document.getElementById("verdict");
+  v.className="verdict "+(s.label==="BANCA"?"banca":s.label==="PUNTO"?"punto":"sit");
+  v.innerHTML=`<div><small class="muted">Lectura de sistemas</small><br><strong>${s.label}</strong></div><div class="muted">P ${s.score.P} · B ${s.score.B} · conviccion ${s.conv}<br>${s.n} manos · racha ${s.rd.last||"-"} x ${s.rd.streak}</div>`;
+  grid(document.getElementById("big"), s.rd.columns, "pb");
+  grid(document.getElementById("beb"), pack(s.rd.beb), "d");
+  grid(document.getElementById("small"), pack(s.rd.small), "d");
+  grid(document.getElementById("cock"), pack(s.rd.cock), "d");
+  const act=s.patterns.filter(p=>p.active);
+  document.getElementById("info").innerHTML=(act.length?act.map(p=>`<p><b>${p.name}</b> → ${p.suggests||"sin lado"} · ${p.intention}</p>`).join(""):`<p class="muted">Ningun patron armado.</p>`)+s.votes.map(v=>`<p><b>${v.system}</b> → ${v.pick} (w${v.w}) · ${v.reason}</p>`).join("");
+}
+function push(x){shoe.push(x);render()}
+function undo(){shoe=shoe.slice(0,-1);render()}
+function reset(){shoe=[];render()}
+function demo(){shoe=DEMO.slice();render()}
+function loadPaste(){
+  const raw=document.getElementById("paste").value.toUpperCase().replace(/PUNTO|PLAYER/g,"P").replace(/BANCA|BANKER/g,"B").replace(/EMPATE|TIE/g,"T");
+  const tokens=Array.from(raw.matchAll(/[PBT]/g),m=>m[0]);
+  if(tokens.length){shoe=tokens;render()}
+}
+render();
+</script>
+</body>
+</html>
