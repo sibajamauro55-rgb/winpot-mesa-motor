@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "baccarat-engine"
+version = "1.1.0"
+description = "Lector de roads y sistemas de piso para baccarat live. No predice cartas."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Axel Sibaja Martinez" }]
+dependencies = []
+
+[project.optional-dependencies]
+api = ["fastapi>=0.115", "uvicorn[standard]>=0.32"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+baccarat-motor = "baccarat_engine.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/baccarat_engine"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
